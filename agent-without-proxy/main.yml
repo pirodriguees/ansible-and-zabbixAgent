@@ -1,0 +1,69 @@
+---
+- hosts: audisys
+  remote_user: root
+  tasks:
+    - name: 'Install agent-zabbix'
+      apt:
+        name: zabbix-agent
+        state: present
+
+    - name: install Python e python-pip
+      apt:
+        name: ['python', 'python-pip']
+        state: present
+
+#Registros
+    - name: 'Registrando o nome da maquina'
+      shell: hostname
+      register: hname
+
+    - name: Registro de IP
+      shell: hostname -I | awk '{print $1}'
+      register: hip     
+
+#Alterando arquivos
+    - name: 'Copiando arquivos de configuracao'
+      copy:
+        src: /etc/ansible/playbooks/zabbix/zabbixAgent-debian/tasks/zabbix_conf_file/zabbix_agentd.conf
+        dest: /etc/zabbix/        
+
+    - name: Adicionado nome do host
+      action: raw sed -i "s/Hostname=zabbix/Hostname="{{ hname.stdout }}"/g" /etc/zabbix/zabbix_agentd.conf
+      
+    - name: Instalando zabbix api 
+      shell: pip install zabbix-api
+
+
+    - name: Inicializando agent do zabbix
+      service:
+        name: zabbix-agent
+        state: started
+        enabled: yes
+      
+    - name: Colocando a maquina no monitoramento
+      local_action:
+        module: zabbix_host
+        server_url: "{{ zabbix_adress }}"
+        login_user: "{{ login_web }}"
+        login_password: "{{ password_web }}"
+        host_name: '{{ hname.stdout }}'
+        visible_name: '{{ hname.stdout }}'
+        description: Instalacao e configuracao via ansible
+        host_groups:
+          - Audisys
+        link_templates:
+          - Template OS Linux
+        status: enabled
+        interfaces:
+          - type: 1
+            main: 1
+            useip: 1
+            ip: '{{ hip.stdout }}'
+            dns: ""
+            port: 10050
+      
+    - name: Restart agente zabbix
+      service:
+        name: zabbix-agent
+        state: restarted
+        enabled: yes
